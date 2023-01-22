@@ -1,8 +1,0 @@
-setup.py
-hettensor/__init__.py
-hettensor/hettensor.py
-hettensor.egg-info/PKG-INFO
-hettensor.egg-info/SOURCES.txt
-hettensor.egg-info/dependency_links.txt
-hettensor.egg-info/requires.txt
-hettensor.egg-info/top_level.txt
