@@ -1,0 +1,6 @@
+Metadata-Version: 2.1
+Name: hettensor
+Version: 0.0.1
+Summary: A wrapper for PyTorch Tensors which enables heterogeneous-sized dimensions.     HetTensors can be constructed with nested list of torch.Tensor. HetTensor supports several operations,     including indexing and reduce operations (sum, mean, prod).
+Author: Ryan Kortvelesy
+Author-email: rk627@cam.ac.uk
