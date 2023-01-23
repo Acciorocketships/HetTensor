@@ -1,6 +1,6 @@
 # HetTensor
 
-A wrapper for Pytorch Tensors which enables variable-sized dimensions.
+A wrapper for PyTorch Tensors which enables variable-sized dimensions.
 
 ## Installation
 
