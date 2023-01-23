@@ -11,6 +11,9 @@ class DimType(IntEnum):
 	het = 1
 	batch = 2
 
+	def __repr__(self):
+		return self.name
+
 
 def select_index(arr, dim, idx):
 	idx_list = [slice(None)] * len(arr.shape)
@@ -99,8 +102,6 @@ class HetTensor:
 		return sizes
 
 	def get_dim_type(self, idxs):
-		# if len(self.data) == 0:
-			# return [DimType.batch]
 		dim_type_new = [None] * len(self.sizes_new)
 		het_dims = list(filter(lambda d: self.sizes_new[d] is None, range(len(self.sizes_new))))
 		het_idxs = idxs[het_dims]
@@ -216,8 +217,8 @@ class HetTensor:
 			k += 1
 
 		tensor_dim = out[0].dim() - self.n_batch
-		list_idx = torch.tensor(idx)
-		tensor_idx = torch.tensor([list(t.shape[:tensor_dim]) for t in out])
+		list_idx = torch.as_tensor(idx)
+		tensor_idx = torch.as_tensor([list(t.shape[:tensor_dim]) for t in out])
 		tensor_idx_tot = tensor_idx.prod(dim=1)
 
 		list_idx_list = list_idx.repeat_interleave(tensor_idx_tot, dim=0)
@@ -245,7 +246,11 @@ class HetTensor:
 		return data, idxs
 
 
-	def flatten(self, tensor_list, cur_level=0, par_idx=[], out=[], idx=[]):
+	def flatten(self, tensor_list, cur_level=0, par_idx=[], out=None, idx=None):
+		if out is None:
+			out = []
+		if idx is None:
+			idx = []
 		if isinstance(tensor_list, torch.Tensor):
 			end_level = cur_level + tensor_list.dim()
 			new_dim = self.get_new_dim(range(cur_level, end_level))
@@ -411,3 +416,19 @@ class HetTensor:
 		if dim is None:
 			return torch.prod(self.data)
 		return self.reduce(dim=dim, op="prod")
+
+
+	def amax(self, dim):
+		if self.normal_tensor:
+			return self.data.amax(dim=dim)
+		if dim is None:
+			return torch.amax(self.data)
+		return self.reduce(dim=dim, op="amax")
+
+
+	def amin(self, dim):
+		if self.normal_tensor:
+			return self.data.amin(dim=dim)
+		if dim is None:
+			return torch.amin(self.data)
+		return self.reduce(dim=dim, op="amin")
