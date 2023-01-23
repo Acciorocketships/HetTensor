@@ -83,7 +83,7 @@ print("Index with torch.Tensor output:", x[:,:,0])
 >         [1, 2, 1]])
 
 ### Reduce Ops
-HetTensors can be reduced (with sum, mean, prod, etc) along any dimension. As with indexing, if the result is a dense tensor, then a normal tensor is returned.
+HetTensors can be reduced (with sum, mean, prod, amax, amin) along any dimension. As with indexing, if the result is a dense tensor, then a normal tensor is returned.
 ```python
 x = HetTensor([[torch.tensor([1,2]), torch.tensor([1]), torch.tensor([3,4,5])],  [torch.tensor([1,3,4]), torch.tensor([2]), torch.tensor([1,2])]])
 print(x.sum(dim=0))
