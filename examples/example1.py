@@ -64,5 +64,18 @@ def run6():
 				   [torch.tensor([1, 3, 4]), torch.tensor([2]), torch.tensor([1, 2])]])
 	print(x.reduce(dim=0, op="amax"))
 
+
+def run7():
+	x = HetTensor([torch.rand(3, 4)])
+	breakpoint()
+
+
+def run8():
+	x = HetTensor([[torch.tensor([1, 2]), torch.tensor([1]), torch.tensor([3, 4, 5])],
+				   [torch.tensor([1, 3, 4]), torch.tensor([2]), torch.tensor([1, 2])]])
+	x = x + 1
+	breakpoint()
+
+
 if __name__ == "__main__":
-	run7()
+	run8()

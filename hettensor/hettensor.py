@@ -51,6 +51,10 @@ class HetTensor:
 		else:
 			self.sizes = self.get_sizes_tree(tensor_list)
 			self.dim_type = self.get_dim_type_tree(tensor_list, self.sizes)
+			if all([d == DimType.batch for d in self.dim_type]):
+				self.normal_tensor = True
+				self.data = self.stack_dense(tensor_list)
+				return
 			self.dim_perm = np.argsort(self.dim_type, kind='stable')
 			self.dim_unperm = np.argsort(self.dim_perm, kind='stable')
 			self.sizes_new = [self.sizes[self.dim_perm[i]] for i in range(len(self.sizes))]
@@ -82,6 +86,14 @@ class HetTensor:
 			to_obj.idxs = from_obj.idxs
 
 
+	def stack_dense(self, data):
+		if isinstance(data, torch.Tensor):
+			return data
+		try:
+			return torch.stack(data, dim=0)
+		except:
+			return torch.stack([self.stack_dense(d) for d in data])
+
 	def rectify_dim_perm(self, dim_perm):
 		# Fixes the dim_perm and dim_unperm if a dimension is removed (due to indexing)
 		dim_unperm = np.argsort(dim_perm, kind="stable")
@@ -100,6 +112,7 @@ class HetTensor:
 		new_sizes = list_sizes + dense_sizes[1:]
 		sizes = [new_sizes[self.dim_unperm[i]] for i in range(len(new_sizes))]
 		return sizes
+
 
 	def get_dim_type(self, idxs):
 		dim_type_new = [None] * len(self.sizes_new)
@@ -246,11 +259,13 @@ class HetTensor:
 		return data, idxs
 
 
-	def flatten(self, tensor_list, cur_level=0, par_idx=[], out=None, idx=None):
+	def flatten(self, tensor_list, cur_level=0, par_idx=None, out=None, idx=None):
 		if out is None:
 			out = []
 		if idx is None:
 			idx = []
+		if par_idx is None:
+			par_idx = []
 		if isinstance(tensor_list, torch.Tensor):
 			end_level = cur_level + tensor_list.dim()
 			new_dim = self.get_new_dim(range(cur_level, end_level))
@@ -432,3 +447,27 @@ class HetTensor:
 		if dim is None:
 			return torch.amin(self.data)
 		return self.reduce(dim=dim, op="amin")
+
+
+	def __add__(self, other):
+		if self.normal_tensor:
+			return self.data + other
+		if isinstance(other, int) or isinstance(other, float) or (isinstance(other, torch.Tensor) and other.dim()==0):
+			data = self.data + other
+			return HetTensor(data=data, idxs=self.idxs, dim_perm=self.dim_perm)
+
+
+	def __radd__(self, other):
+		return self + other
+
+
+	def __mul__(self, other):
+		if self.normal_tensor:
+			return self.data * other
+		if isinstance(other, int) or isinstance(other, float) or (isinstance(other, torch.Tensor) and other.dim()==0):
+			data = self.data * other
+			return HetTensor(data=data, idxs=self.idxs, dim_perm=self.dim_perm)
+
+
+	def __rmul__(self, other):
+		return self * other
