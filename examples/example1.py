@@ -1,5 +1,5 @@
 import torch
-from hettensor import HetTensor
+from hettensor import HetTensor, DimType
 
 def run0():
 	agent1 = torch.tensor([[0, 1, 1, 2, 3],[1, 2, 3, 3, 0]]).float().requires_grad_(True)
@@ -9,7 +9,7 @@ def run0():
 	t = [[agent1, agent2], [], [agent3]]
 
 	het = HetTensor(t)
-	x = het[:,0]
+	x = het[0,0]
 	breakpoint()
 
 
@@ -67,15 +67,19 @@ def run6():
 
 def run7():
 	x = HetTensor([torch.rand(3, 4)])
-	breakpoint()
+	print(x)
 
 
 def run8():
 	x = HetTensor([[torch.tensor([1, 2]), torch.tensor([1]), torch.tensor([3, 4, 5])],
 				   [torch.tensor([1, 3, 4]), torch.tensor([2]), torch.tensor([1, 2])]])
 	x = x + 1
-	breakpoint()
+
+
+def run9():
+	z = HetTensor([torch.tensor([[1,2,3],[4,5,6]]), torch.tensor([[7,8,9]])])
+	print(z.shape)
 
 
 if __name__ == "__main__":
-	run8()
+	run9()
