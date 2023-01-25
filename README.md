@@ -96,18 +96,17 @@ print(x.sum(dim=2))
 ### Operations
 Operations such as + and * are implemented between two HetTensors, or between HetTensors and normal tensors. Broadcasting is also enabled, so dimensions of size 1 will be repeated across the all elements in the corresponding dimension of the other tensor.
 ```python
-  x = HetTensor([torch.tensor([[1,2,3],[4,5,6]]), torch.tensor([[7,8,9]])])
-	y = HetTensor([torch.tensor([[0.1], [0.2]]), torch.tensor([[0.3]])])
-	z = x + y
-  print(x.shape, y.shape)
-	print(z)
+x = HetTensor([torch.tensor([[1,2,3],[4,5,6]]), torch.tensor([[7,8,9]])])
+y = HetTensor([torch.tensor([[0.1], [0.2]]), torch.tensor([[0.3]])])
+z = x + y
+print(x.shape, y.shape)
+print(z)
   
-  x = HetTensor([torch.tensor([[1,2,3],[4,5,6]]), torch.tensor([[7,8,9]])])
-	y = torch.tensor([[[0.1, 0.2, 0.3]]])
-  print(x.shape, y.shape)
-	z = x * y
-  
-	print(z)
+x = HetTensor([torch.tensor([[1,2,3],[4,5,6]]), torch.tensor([[7,8,9]])])
+y = torch.tensor([[[0.1, 0.2, 0.3]]])
+z = x * y
+print(x.shape, y.shape)
+print(z)
 ```
 > torch.Size([-1, -1, 3]) <p>
 > torch.Size([-1, -1, 1]) <p>
