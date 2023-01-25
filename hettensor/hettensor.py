@@ -141,7 +141,6 @@ class HetTensor:
 
 	def get_dim_type_tree(self, tensor_list, sizes):
 		batch, _ = self.dim_type_helper(tensor_list, sizes=sizes, batch=[True]*len(sizes), cur_level=0)
-		# batch = [DimType.het if (sizes[i] is None) else DimType.batch if x else DimType.stack for (i,x) in enumerate(batch)]
 		batch = [DimType.het if ((sizes[i] is None) or (not x)) else DimType.batch for (i, x) in enumerate(batch)]
 		return batch
 
@@ -167,21 +166,27 @@ class HetTensor:
 			return batch, tensor_sizes
 
 
-	def get_new_dim(self, dim):
+	def get_new_dim(self, dim, dim_unperm=None):
+		if dim_unperm is None:
+			dim_unperm = self.dim_unperm
 		if isinstance(dim, GeneratorType):
 			dim = list(dim)
 		if isinstance(dim, list):
-			return [self.get_new_dim(d) for d in dim]
-		return self.dim_unperm[dim]
+			return [self.get_new_dim(d, dim_unperm=dim_unperm) for d in dim]
+		return dim_unperm[dim]
 
 
-	def get_dense_dim(self, dim):
+	def get_dense_dim(self, dim, idxs=None, dim_unperm=None):
+		if idxs is None:
+			idxs = self.idxs
+		if dim_unperm is None:
+			dim_unperm = self.dim_unperm
 		if isinstance(dim, GeneratorType):
 			dim = list(dim)
 		if isinstance(dim, list):
-			return [self.get_dense_dim(d) for d in dim]
+			return [self.get_dense_dim(d, idxs=idxs) for d in dim]
 		# dense_dim = self.get_new_dim(dim) - self.n_het
-		dense_dim = self.get_new_dim(dim) - self.idxs.shape[0]
+		dense_dim = self.get_new_dim(dim, dim_unperm=dim_unperm) - idxs.shape[0]
 		if dense_dim < 0:
 			dense_dim = None
 		return dense_dim
@@ -268,11 +273,14 @@ class HetTensor:
 		return all([self.dim_type[i] == DimType.batch for i in range(len(self.dim_type))])
 
 
-	def max_size(self, dim):
-		dense_dim = self.get_dense_dim(dim)
+	def max_size(self, dim, data=None, idxs=None, dim_unperm=None):
+		data = data if (data is not None) else self.data
+		idxs = idxs if (idxs is not None) else self.idxs
+		dim_unperm = dim_unperm if (dim_unperm is not None) else self.dim_unperm
+		dense_dim = self.get_dense_dim(dim, idxs=idxs, dim_unperm=dim_unperm)
 		if dense_dim is not None:
-			return self.data.shape[dense_dim+1]
-		return torch.max(self.idxs[self.get_new_dim(dim),:], dim=0).values.item()+1
+			return data.shape[dense_dim+1]
+		return torch.max(idxs[self.get_new_dim(dim, dim_unperm=dim_unperm),:], dim=0).values.item()+1
 
 
 	def unbind(self):
@@ -361,10 +369,17 @@ class HetTensor:
 		return torch.Size(self.max_sizes)
 
 
-	def to_sparse(self):
+	def to_sparse(self, data=None, idxs=None, dim_perm=None):
 		# Casts to torch sparse format (permuted to the new dimensions, as the dense dims must be last)
-		max_shape = [self.max_sizes[self.dim_perm[i]] for i in range(len(self.max_sizes))]
-		sparse = torch.sparse_coo_tensor(self.idxs, self.data, max_shape)
+		data = data if (data is not None) else self.data
+		idxs = idxs if (idxs is not None) else self.idxs
+		if dim_perm is None:
+			dim_perm = self.dim_perm
+			dim_unperm = self.dim_unperm
+		else:
+			dim_unperm = np.argsort(dim_perm, kind="stable")
+		max_shape = [self.max_size(dim_perm[i], data=data, idxs=idxs, dim_unperm=dim_unperm) for i in range(len(dim_perm))]
+		sparse = torch.sparse_coo_tensor(idxs, data, max_shape)
 		return sparse
 
 
@@ -437,12 +452,61 @@ class HetTensor:
 		return self.reduce(dim=dim, op="amin")
 
 
-	def __add__(self, other):
-		if self.normal_tensor:
-			return self.data + other
+	def combine(self, other, op):
+		if isinstance(other, HetTensor) and other.normal_tensor:
+			other = other.data
+		if self.normal_tensor and isinstance(other, HetTensor) and (not other.normal_tensor):
+			return other.__add__(self)
+		if self.normal_tensor and isinstance(other, torch.Tensor):
+			return op(self.data, other)
 		if isinstance(other, int) or isinstance(other, float) or (isinstance(other, torch.Tensor) and other.dim()==0):
-			data = self.data + other
+			data = op(self.data, other)
 			return HetTensor(data=data, idxs=self.idxs, dim_perm=self.dim_perm)
+		if isinstance(other, torch.Tensor):
+			assert self.dim() == other.dim(), "Tensors must have the same number of dimensions"
+			perm = [None] * self.n_batch
+			k = self.n_batch-1
+			for d in reversed(range(other.dim())):
+				dense_dim = self.get_dense_dim(d)
+				if dense_dim is None:
+					assert other.shape[d] == 1, "Dimensions corresponding to Het dimensions must be 1 in order to be broadcast"
+					other = other.squeeze(d)
+				else:
+					perm[dense_dim] = k
+					k -= 1
+			other = other.permute(*perm)
+			data = op(self.data, other)
+			return HetTensor(data=data, idxs=self.idxs, dim_perm=self.dim_perm)
+		if isinstance(other, HetTensor):
+			assert self.dim() == other.dim(), "Tensors must have the same number of dimensions"
+			assert self.data.dim() == other.data.dim(), "Tensors must have the same number of dense dims"
+			self_dim_perm = self.dim_unperm[-self.n_batch:] - self.n_het + 1
+			other_dim_perm = other.dim_unperm[-other.n_batch:] - other.n_het + 1
+			self_data = self.data.permute(0, *self_dim_perm)
+			other_data = other.data.permute(0, *other_dim_perm)
+			for d in range(1,self.data.dim()):
+				if self.data.shape[d] == 1 and other.data.shape[d] != 1:
+					exp_size = [-1] * self.data.dim()
+					exp_size[d] = other.data.shape[d]
+					self_data = self_data.expand(*exp_size)
+				if other.data.shape[d] == 1 and self.data.shape[d] != 1:
+					exp_size = [-1] * other.data.dim()
+					exp_size[d] = self.data.shape[d]
+					other_data = other_data.expand(*exp_size)
+			sparse_self = self.to_sparse(data=self_data)
+			sparse_other = other.to_sparse(data=other_data)
+			result = op(sparse_self, sparse_other)
+			result = result.coalesce()
+			result_data = result.values()
+			result_idxs = result.indices()
+			data_unperm = np.argsort(self_dim_perm, kind="stable") + 1
+			result_data = result_data.permute(0, *data_unperm)
+			out = HetTensor(data=result_data, idxs=result_idxs, dim_perm=self.dim_perm)
+			return out
+
+
+	def __add__(self, other):
+		return self.combine(other, lambda x, y: x + y)
 
 
 	def __radd__(self, other):
@@ -450,11 +514,7 @@ class HetTensor:
 
 
 	def __mul__(self, other):
-		if self.normal_tensor:
-			return self.data * other
-		if isinstance(other, int) or isinstance(other, float) or (isinstance(other, torch.Tensor) and other.dim()==0):
-			data = self.data * other
-			return HetTensor(data=data, idxs=self.idxs, dim_perm=self.dim_perm)
+		return self.combine(other, lambda x, y: x * y)
 
 
 	def __rmul__(self, other):

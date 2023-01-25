@@ -78,8 +78,27 @@ def run8():
 
 def run9():
 	z = HetTensor([torch.tensor([[1,2,3],[4,5,6]]), torch.tensor([[7,8,9]])])
-	print(z.shape)
+	y = torch.rand(1,1,3)
+	x = y + z
+	breakpoint()
+
+
+def run10():
+	x = HetTensor([torch.tensor([[1,2,3],[4,5,6]]), torch.tensor([[7,8,9]])])
+	x_sparse = x.to_sparse()
+	z = HetTensor([torch.tensor([[0.1], [0.2]]), torch.tensor([[0.3]])])
+	z_sparse = z.to_sparse()
+	y = x * z
+	breakpoint()
+
+
+def run11():
+	x = HetTensor([torch.tensor([[1,2,3],[4,5,6]]), torch.tensor([[7,8,9]])])
+	x_sparse = x.to_sparse()
+	y = torch.tensor([[[0.1, 0.2, 0.3]]])
+	z = x + y
+	breakpoint()
 
 
 if __name__ == "__main__":
-	run9()
+	run10()
