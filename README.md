@@ -23,7 +23,7 @@ print(x)
 > [[tensor([1, 2]), tensor([3])], tensor([[4, 5, 6]])]
 
 ### Dim Types
-HetTensors support any number of nested levels, and any shape of tensors. HetTensor will assign each dimension of the input to one of two categories: batch and het (represented as an enum). Batch dimensions have a fixed size, and indexing along them yields slices of the same shape. On the other hand, indexing along a het dimension will result in slices of different shapes. Equivalently, indexing across other het dimensions will yield varying sizes in a het dimension.
+HetTensors support any number of nested levels, and any shape of tensors. HetTensor will assign each dimension of the input to one of two categories: batch and het (represented as an enum). Batch dimensions have a fixed size, and indexing along them yields slices of the same shape. On the other hand, indexing along a het dimension will result in slices of different shapes. Equivalently, the het dimension itself will vary in size as one indexes across other (het) dimensions.
 ```python
 x = HetTensor([[torch.tensor([1,2]), torch.tensor([1]), torch.tensor([3,4,5])],  [torch.tensor([1,3,4]), torch.tensor([2]), torch.tensor([1,2])]])
 y = HetTensor([[torch.tensor([1,2]), torch.tensor([0]), torch.tensor([0])],  [[], torch.tensor([3]), torch.tensor([3]), torch.tensor([1,2])]])
