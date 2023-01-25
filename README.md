@@ -109,11 +109,13 @@ Operations such as + and * are implemented between two HetTensors, or between He
   
 	print(z)
 ```
-> torch.Size([-1, -1, 3]) torch.Size([-1, -1, 1])
+> torch.Size([-1, -1, 3]) <p>
+> torch.Size([-1, -1, 1]) <p>
 > [   tensor([[1.1000, 2.1000, 3.1000], <br>
 >             [4.2000, 5.2000, 6.2000]]), <br>
 >     tensor([[7.3000, 8.3000, 9.3000]])] <p>
-> torch.Size([-1, -1, 3]) torch.Size([1, 1, 3])
+> torch.Size([-1, -1, 3]) <p>
+> torch.Size([1, 1, 3]) <p>
 > [   tensor([[0.1000, 0.4000, 0.9000], <br>
 >             [0.4000, 1.0000, 1.8000]]), <br>
 >     tensor([[0.7000, 1.6000, 2.7000]])]
