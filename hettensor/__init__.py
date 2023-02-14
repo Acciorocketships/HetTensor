@@ -1,1 +1,1 @@
-from hettensor.hettensor import HetTensor, DimType
+from hettensor.hettensor import HetTensor, cat

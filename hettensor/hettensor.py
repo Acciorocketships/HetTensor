@@ -5,10 +5,10 @@ from types import GeneratorType
 from typing import List, Union
 import pprint
 
-
 class DimType(IntEnum):
-	het = 0
-	batch = 1
+	stack = 0
+	het = 1
+	batch = 2
 
 	def __repr__(self):
 		return self.name
@@ -17,7 +17,7 @@ class DimType(IntEnum):
 def select_index(arr, dim, idx):
 	idx_list = [slice(None)] * len(arr.shape)
 	idx_list[dim] = idx
-	return arr.__getitem__(idx_list)
+	return arr.__getitem__(tuple(idx_list))
 
 
 class HetTensor:
@@ -52,10 +52,14 @@ class HetTensor:
 		self.sizes = self.get_sizes(self.idxs, self.data, self.dim_type)
 		self.sizes_new = [self.sizes[self.dim_perm[i]] for i in range(len(self.sizes))]
 		self.max_sizes = [self.sizes[i] if (self.dim_type[i] != DimType.het) else self.max_size(i) for i in range(len(self.sizes))]
-		# self.n_stack = sum(map(lambda x: x == DimType.stack, self.dim_type))
+		self.n_stack = sum(map(lambda x: x == DimType.stack, self.dim_type))
 		self.n_het = sum(map(lambda x: x == DimType.het, self.dim_type))
 		self.n_batch = sum(map(lambda x: x == DimType.batch, self.dim_type))
 		self.n_dim = len(self.dim_perm)
+		if self.n_batch == self.dim():
+			self.normal_tensor = True
+
+
 
 
 	def stack_dense(self, data):
@@ -104,9 +108,27 @@ class HetTensor:
 			if same_shape:
 				same_data = all([torch.all(slices[0] == s) for s in slices])
 			is_batch = (same_shape and same_data)
-			dim_type_new[d] = DimType.batch if is_batch else DimType.het
+			is_stack = False
+			if not is_batch:
+				is_stack = all([self.is_dense(s) for s in slices])
+			if is_batch:
+				dim_type_new[d] = DimType.batch
+			elif is_stack:
+				dim_type_new[d] = DimType.stack
+			else:
+				dim_type_new[d] = DimType.het
 		dim_type = [dim_type_new[dim_perm[i]] for i in range(len(dim_type_new))]
 		return dim_type
+
+
+	def is_dense(self, idxs):
+		if idxs.numel() == 0:
+			return True
+		dim_sizes = torch.amax(idxs, dim=1)+1
+		expected_shape = torch.prod(dim_sizes)
+		unique_idxs = torch.unique(idxs, dim=1)
+		is_dense = (unique_idxs.shape[1] == expected_shape)
+		return is_dense
 
 
 	def get_sizes_tree(self, tensor_list: Union[List, torch.Tensor]):
@@ -471,17 +493,29 @@ class HetTensor:
 				if dense_dim is None:
 					assert other.shape[d] == 1, "Dimensions corresponding to Het dimensions must be 1 in order to be broadcast"
 					other = other.squeeze(d)
+					# if other.shape[d] != 1:
+					# 	assert other.shape[d] == self.max_shape[d], f"Het dim {d} max shape is {self.max_shape[d]}, Other dim {d} shape is {other.shape[d]}"
+					# 	het_list = [None] * self.max_shape[d]
+					# 	for i in range(self.max_shape[d]):
+					# 		sub_self = select_index(self, d, i)
+					# 		sub_other = select_index(other, d, i)
+					# 		if isinstance(sub_self, HetTensor):
+					# 			het_list[i] = sub_self.combine(sub_other)
+					# 		else:
+					# 			het_list[i] = op(sub_self, sub_other)
+					# 	out = cat(het_list, dim=d)
+					# 	return out
 				else:
 					perm[dense_dim] = k
 					k -= 1
-			other = other.permute(*perm)
+			other = other.squeeze().permute(*perm)
 			data = op(self.data, other)
 			return HetTensor(data=data, idxs=self.idxs, dim_perm=self.dim_perm)
 		if isinstance(other, HetTensor):
 			assert self.dim() == other.dim(), "Tensors must have the same number of dimensions"
 			assert self.data.dim() == other.data.dim(), "Tensors must have the same number of dense dims"
-			self_dim_perm = self.dim_unperm[-self.n_batch:] - self.n_het + 1
-			other_dim_perm = other.dim_unperm[-other.n_batch:] - other.n_het + 1
+			self_dim_perm = self.dim_unperm[-self.n_batch:] - (self.dim() - self.n_batch) + 1
+			other_dim_perm = other.dim_unperm[-other.n_batch:] - (self.dim() - self.n_batch) + 1
 			self_data = self.data.permute(0, *self_dim_perm)
 			other_data = other.data.permute(0, *other_dim_perm)
 			for d in range(1,self.data.dim()):
@@ -544,3 +578,96 @@ class HetTensor:
 			dim_perm = np.insert(dim_perm, new_dim, dim)
 			idxs = torch.cat([self.idxs[:new_dim], torch.zeros(1,self.idxs.shape[1]), self.idxs[new_dim:]], dim=0).int()
 			return HetTensor(data=self.data, idxs=idxs, dim_perm=dim_perm)
+
+
+	def scatter(self, idxs, batch_dims=[], index_dim=1, data=None, src_sink=True):
+		if data is None:
+			data = self
+		if len(batch_dims) > 0:
+			assert idxs.max_shape[0] == self.max_shape[0]
+			dim_size = self.max_shape[batch_dims[0]]
+			cat_list = [None] * dim_size
+			for i in range(dim_size):
+				sub_mask = idxs.idxs[0,:]==i
+				sub_idxs = HetTensor(data=idxs.data[sub_mask], idxs=idxs.idxs[1:, sub_mask], dim_perm=idxs.dim_perm[1:])
+				if sub_idxs.normal_tensor:
+					sub_idxs = sub_idxs.data
+				sub_data = select_index(data, batch_dims[0], i)
+				sub_index_dim = index_dim if batch_dims[0] >= index_dim else index_dim-1
+				sub_scatter = self.scatter(sub_idxs, data=sub_data, index_dim=sub_index_dim)
+				cat_list[i] = sub_scatter.unsqueeze(0)
+			out = cat(cat_list, batch_dims[0])
+			return out
+		else:
+			assert isinstance(idxs, torch.Tensor)
+			if src_sink:
+				idxsi = idxs[:, 0]
+				idxsj = idxs[:, 1]
+			else:
+				idxsi = idxs[:, 1]
+				idxsj = idxs[:, 0]
+			if isinstance(data, torch.Tensor):
+				new_data = select_index(data, index_dim, idxsi)
+				new_dim_perm = list(range(new_data.dim()+1))
+				idxs_elements = running_counts(idxsj)
+				idxs_new = torch.stack([idxsj, idxs_elements], dim=0)
+				out = HetTensor(data=new_data, idxs=idxs_new, dim_perm=new_dim_perm)
+				return out
+			elif isinstance(data, HetTensor):
+				raise NotImplementedError()
+			# 	dim_size = torch.amax(data.idxs[index_dim])+1
+			# 	idxi_all = torch.cat([idxsi, torch.arange(dim_size)])
+			# 	unique_idxi, count_idxi = torch.unique(idxi_all, sorted=True, return_counts=True)
+			# 	count_idxi -= 1
+			# 	unique_het, inv_het = torch.unique(data.idxs[index_dim], sorted=True, return_inverse=True)
+			# 	assert len(unique_het) == len(unique_idxi)
+			# 	assert torch.all(unique_het == unique_idxi)
+			# 	repeats = count_idxi[inv_het]
+			# 	new_data = data.data.repeat_interleave(repeats)
+			# 	new_idxs = data.idxs.repeat_interleave(repeats, dim=1)
+			# 	chunks = [idxsj[idxsi == i] for i in unique_idxi]
+			# 	new_idxsj = torch.cat([chunks[x] for x in inv_het], dim=0)
+			# 	new_idxs = torch.cat([new_idxs, new_idxsj.unsqueeze(0)], dim=0)
+			# 	new_dim_perm = data.dim_perm.tolist()
+			# 	new_dim_perm += [index_dim+0.5]
+			# 	new_dim_perm = self.rectify_dim_perm(new_dim_perm)[0]
+			# 	out = HetTensor(data=new_data, idxs=new_idxs, dim_perm=new_dim_perm)
+			# 	return out
+
+
+def cat(het_list, dim=0):
+	# dense_dim = -1
+	# for x in het_list:
+	# 	if isinstance(x, HetTensor):
+	# 		dense_dim = x.get_dense_dim(dim)
+	# 		break
+	# if dense_dim == -1:
+	# 	return torch.cat(het_list, dim=dim)
+	# if dense_dim is not None:
+	# 	def cat_op(x, y):
+	# 		return torch.cat([x,y], dim=dense_dim)
+	# 	out = het_list[0]
+	# 	for x in het_list[1:]:
+	# 		out = out.combine(x, cat_op)
+	# 	return out
+	# else:
+	max_shapes = torch.tensor([x.max_shape[dim] for x in het_list])
+	max_shapes_cum = torch.cat([torch.tensor([0]), torch.cumsum(max_shapes, dim=0)], dim=0)
+	idxs = [x.idxs.clone() for x in het_list]
+	data = [x.data.clone() for x in het_list]
+	for i, x in enumerate(idxs):
+		x[dim] += max_shapes_cum[i]
+	idxs_new = torch.cat(idxs, dim=1)
+	data_new = torch.cat(data)
+	out = HetTensor(idxs=idxs_new, data=data_new, dim_perm=het_list[0].dim_perm)
+	return out
+
+
+def running_counts(idxs):
+	perm = torch.argsort(idxs, stable=True)
+	unperm = torch.argsort(perm, stable=True)
+	idxsj_sorted = idxs[perm]
+	_, counts_idxsj = torch.unique(idxsj_sorted, return_counts=True)
+	arange = torch.cat([torch.arange(count) for count in counts_idxsj], dim=0)
+	counts = arange[unperm]
+	return counts

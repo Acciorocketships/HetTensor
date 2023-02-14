@@ -1,5 +1,6 @@
 import torch
-from hettensor import HetTensor, DimType
+from hettensor import HetTensor
+import hettensor
 
 def run0():
 	agent1 = torch.tensor([[0, 1, 1, 2, 3],[1, 2, 3, 3, 0]]).float().requires_grad_(True)
@@ -15,7 +16,7 @@ def run0():
 
 def run1():
 	x = HetTensor([[torch.tensor([1, 2]), torch.tensor([1]), torch.tensor([3, 4, 5])],
-				   [torch.tensor([1, 3, 4]), torch.tensor([2]), torch.tensor([1, 2])]])
+				   [torch.tensor([1, 3]), torch.tensor([2]), torch.tensor([1, 2, 3])]])
 	y = HetTensor([[torch.tensor([1, 2]), torch.tensor([0]), torch.tensor([0])],
 				   [[], torch.tensor([3]), torch.tensor([3]), torch.tensor([1, 2])]])
 	z = HetTensor([torch.tensor([[1,2,3],[4,5,6]]), torch.tensor([[7,8,9]])])
@@ -30,6 +31,7 @@ def run2():
 	y = HetTensor([[torch.tensor([1, 2]), torch.tensor([0]), torch.tensor([0])],
 				   [[], torch.tensor([3]), torch.tensor([3]), torch.tensor([1, 2])]])
 	z = HetTensor([torch.tensor([[1,2,3],[4,5,6]]), torch.tensor([[7,8,9]])])
+	breakpoint()
 	print("x shape:", x.shape)
 	print("y shape:", y.shape)
 	print("z shape:", z.shape)
@@ -101,5 +103,21 @@ def run11():
 	print(z)
 
 
+def run12():
+	z = HetTensor([torch.tensor([[1,2,3],[4,5,6]]), torch.tensor([[7,8,9]])])
+	# shape: 2 x [2,1] x 3
+	idx = HetTensor([torch.tensor([[0,1], [1,0], [1,1]]), torch.tensor([[0,0]])])
+
+	y = z.scatter(idx, batch_dims=[0], index_dim=1)
+	print(y)
+
+def run13():
+	z1 = HetTensor([torch.tensor([[1.1,2.1,3.1],[4.1,5.1,6.1]]), torch.tensor([[7.1,8.1,9.1]])])
+	z2 = HetTensor([torch.tensor([[1, 2, 3], [4, 5, 6]]), torch.tensor([[7, 8, 9]])])
+	y = hettensor.cat([z1, z2], dim=1)
+	print(y)
+	breakpoint()
+
+
 if __name__ == "__main__":
-	run10()
+	run14()
