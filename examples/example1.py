@@ -76,13 +76,14 @@ def run8():
 	x = HetTensor([[torch.tensor([1, 2]), torch.tensor([1]), torch.tensor([3, 4, 5])],
 				   [torch.tensor([1, 3, 4]), torch.tensor([2]), torch.tensor([1, 2])]])
 	x = x + 1
+	print(x)
 
 
 def run9():
 	z = HetTensor([torch.tensor([[1,2,3],[4,5,6]]), torch.tensor([[7,8,9]])])
 	y = torch.rand(1,1,3)
 	x = y + z
-	breakpoint()
+	print(x)
 
 
 def run10():
@@ -112,9 +113,15 @@ def run12():
 	print(y)
 
 def run13():
-	z1 = HetTensor([torch.tensor([[1.1,2.1,3.1],[4.1,5.1,6.1]]), torch.tensor([[7.1,8.1,9.1]])])
-	z2 = HetTensor([torch.tensor([[1, 2, 3], [4, 5, 6]]), torch.tensor([[7, 8, 9]])])
-	y = hettensor.cat([z1, z2], dim=1)
+	z = HetTensor([torch.tensor([[1, 2, 3], [4, 5, 6]]), torch.tensor([[7, 8, 9]])])
+	x = torch.rand(2, 1, 3)
+	y = z.apply(x, lambda x, y: torch.cat([x, y.expand(x.shape[0], -1)], dim=-1), batch_dims=[0])
+	print(z.shape)
+	breakpoint()
+
+def run14():
+	z = HetTensor([torch.tensor([[1, 2, 3], [4, 5, 6]]), torch.tensor([[7, 8, 9]])])
+	y = z.apply(None, lambda x: x**2, batch_dims=[0])
 	print(y)
 	breakpoint()
 

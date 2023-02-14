@@ -572,8 +572,8 @@ class HetTensor:
 		if data is None:
 			data = self
 		if len(batch_dims) > 0:
-			assert idxs.max_shape[0] == self.max_shape[0]
-			dim_size = self.max_shape[batch_dims[0]]
+			assert idxs.max_shape[0] == data.max_shape[0]
+			dim_size = data.max_shape[batch_dims[0]]
 			cat_list = [None] * dim_size
 			for i in range(dim_size):
 				sub_mask = idxs.idxs[0,:]==i
@@ -582,7 +582,7 @@ class HetTensor:
 					sub_idxs = sub_idxs.data
 				sub_data = select_index(data, batch_dims[0], i)
 				sub_index_dim = index_dim if batch_dims[0] >= index_dim else index_dim-1
-				sub_scatter = self.scatter(sub_idxs, data=sub_data, index_dim=sub_index_dim)
+				sub_scatter = data.scatter(sub_idxs, data=sub_data, index_dim=sub_index_dim)
 				cat_list[i] = sub_scatter.unsqueeze(0)
 			out = cat(cat_list, batch_dims[0])
 			return out
@@ -605,7 +605,42 @@ class HetTensor:
 				raise NotImplementedError()
 
 
+	def apply(self, x, op, batch_dims=[], x_self=None):
+		if x_self is None:
+			x_self = self
+		if len(batch_dims) > 0:
+			if isinstance(x_self, HetTensor):
+				dim_size = x_self.max_shape[batch_dims[0]]
+			else:
+				dim_size = x_self.shape[batch_dims[0]]
+			cat_list = [None] * dim_size
+			for i in range(dim_size):
+				sub_self = select_index(x_self, batch_dims[0], i)
+				if x is not None:
+					sub_x = select_index(x, batch_dims[0], i)
+				else:
+					sub_x = None
+				cat_list[i] = self.apply(sub_x, op, batch_dims[1:], x_self=sub_self)
+			new_data = cat(cat_list, dim=batch_dims[0])
+			out = HetTensor(data=new_data, idxs=self.idxs, dim_perm=self.dim_perm)
+			return out
+		else:
+			if isinstance(x_self, HetTensor):
+				if x is not None:
+					new_data = op(x_self.data, x)
+				else:
+					new_data = op(x_self.data)
+				return HetTensor(data=new_data, idxs=x_self.idxs, dim_perm=x_self.dim_perm)
+			else:
+				if x is not None:
+					return op(x_self, x)
+				else:
+					return op(x_self)
+
+
 def cat(het_list, dim=0):
+	if not any([isinstance(x, HetTensor) for x in het_list]):
+		return torch.cat(het_list, dim=dim)
 	max_shapes = torch.tensor([x.max_shape[dim] for x in het_list])
 	max_shapes_cum = torch.cat([torch.tensor([0]), torch.cumsum(max_shapes, dim=0)], dim=0)
 	idxs = [x.idxs.clone() for x in het_list]
